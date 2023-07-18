@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
 
 struct PaymasterData {
-    address paymasterId;
+    address sponsorId;
     bytes signature;
     uint256 signatureLength;
 }
 
 struct PaymasterContext {
-    address paymasterId;
+    address sponsorId;
     uint256 gasPrice;
 }
 
@@ -25,14 +25,17 @@ library PaymasterHelpers {
      * @dev Encodes the paymaster context: paymasterId and gasPrice
      * @param op UserOperation object
      * @param data PaymasterData passed
-     * @param gasPrice effective gasPrice
+     * @param prefundedAmount Prefunded amount
+     * @param costOfPost Cost of post
      */
     function paymasterContext(
         UserOperation calldata op,
         PaymasterData memory data,
-        uint256 gasPrice
+        uint256 prefundedAmount,
+        uint256 costOfPost
     ) internal pure returns (bytes memory context) {
-        return abi.encode(data.paymasterId, gasPrice);
+        return
+            abi.encode(data.sponsorId, op.sender, prefundedAmount, costOfPost);
     }
 
     /**
@@ -42,11 +45,11 @@ library PaymasterHelpers {
         UserOperation calldata op
     ) internal pure returns (PaymasterData memory) {
         bytes calldata paymasterAndData = op.paymasterAndData;
-        (address paymasterId, bytes memory signature) = abi.decode(
+        (address sponsorId, bytes memory signature) = abi.decode(
             paymasterAndData[20:],
             (address, bytes)
         );
-        return PaymasterData(paymasterId, signature, signature.length);
+        return PaymasterData(sponsorId, signature, signature.length);
     }
 
     /**
@@ -55,10 +58,10 @@ library PaymasterHelpers {
     function _decodePaymasterContext(
         bytes memory context
     ) internal pure returns (PaymasterContext memory) {
-        (address paymasterId, uint256 gasPrice) = abi.decode(
+        (address sponsorId, uint256 gasPrice) = abi.decode(
             context,
             (address, uint256)
         );
-        return PaymasterContext(paymasterId, gasPrice);
+        return PaymasterContext(sponsorId, gasPrice);
     }
 }

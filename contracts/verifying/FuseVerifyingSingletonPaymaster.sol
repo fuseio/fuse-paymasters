@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 /* solhint-disable reason-string */
 /* solhint-disable no-inline-assembly */
@@ -19,7 +19,7 @@ import {VerifyingPaymasterErrors} from "../common/Errors.sol";
  *  - The paymaster signs to agree to PAY for GAS.
  *  - The wallet signs to prove identity and wallet ownership.
  */
-contract VerifyingSingletonPaymaster is
+contract FuseVerifyingSingletonPaymaster is
     BasePaymaster,
     ReentrancyGuard,
     VerifyingPaymasterErrors
@@ -30,31 +30,30 @@ contract VerifyingSingletonPaymaster is
     using PaymasterHelpers for bytes;
     using PaymasterHelpers for PaymasterData;
 
-    // Gas used in EntryPoint._handlePostOp() method (including this#postOp() call)
-    uint256 private unaccountedEPGasOverhead;
-    mapping(address => uint256) public paymasterIdBalances;
+    // calculated cost of the postOp
+    uint256 private constant COST_OF_POST = 40000;
+
+    mapping(address => address) public sponsorOwners;
+    mapping(address => uint256) public sponsorBalances;
 
     address public verifyingSigner;
-
-    event EPGasOverheadChanged(
-        uint256 indexed _oldValue,
-        uint256 indexed _newValue
-    );
 
     event VerifyingSignerChanged(
         address indexed _oldSigner,
         address indexed _newSigner,
         address indexed _actor
     );
-    event GasDeposited(address indexed _paymasterId, uint256 indexed _value);
-    event GasWithdrawn(
-        address indexed _paymasterId,
-        address indexed _to,
-        uint256 indexed _value
+    event DepositedFunds(address indexed _sponsorId, uint256 indexed _value);
+    event WithdrawnFunds(address indexed _sponsorId, uint256 indexed _value);
+    event BalanceDeducted(address indexed _sponsorId, uint256 indexed _charge);
+    event SponsorCreated(address indexed _sponsorId, address indexed _owner);
+    event SponsorSuccessful(
+        address indexed _sponsorId,
+        address indexed _sender
     );
-    event GasBalanceDeducted(
-        address indexed _paymasterId,
-        uint256 indexed _charge
+    event SponsorUnsuccessful(
+        address indexed _sponsorId,
+        address indexed _sender
     );
 
     constructor(
@@ -68,31 +67,39 @@ contract VerifyingSingletonPaymaster is
         assembly {
             sstore(verifyingSigner.slot, _verifyingSigner)
         }
-        unaccountedEPGasOverhead = 9600;
     }
 
     /**
-     * @dev Add a deposit for this paymaster and given paymasterId (Dapp Depositor address), used for paying for transaction fees
-     * @param paymasterId dapp identifier for which deposit is being made
+     * @dev Add a deposit for this sponsor and given sponsorId (Project's identifier), used for paying for transaction fees
+     * @param sponsorId project's identifier for which deposit is being made
      */
-    function depositFor(address paymasterId) external payable nonReentrant {
-        if (paymasterId == address(0)) revert PaymasterIdCannotBeZero();
+    function depositFor(address sponsorId) external payable nonReentrant {
+        if (sponsorId == address(0)) revert SponsorCannotBeZero();
         if (msg.value == 0) revert DepositCanNotBeZero();
-        paymasterIdBalances[paymasterId] =
-            paymasterIdBalances[paymasterId] +
-            msg.value;
+        // If it's the first time deposit for a sponsorId, set the owner of the sponsorId to msg.sender
+        if (sponsorOwners[sponsorId] == address(0)) {
+            sponsorOwners[sponsorId] = address(msg.sender);
+            emit SponsorCreated(sponsorId, msg.sender);
+        }
+        if (sponsorOwners[sponsorId] != msg.sender)
+            revert CannotDepositToNotOwnedSponsor();
+        sponsorBalances[sponsorId] = sponsorBalances[sponsorId] + msg.value;
         entryPoint.depositTo{value: msg.value}(address(this));
-        emit GasDeposited(paymasterId, msg.value);
+        emit DepositedFunds(sponsorId, msg.value);
     }
 
     /**
-     * @dev get the current deposit for paymasterId (Dapp Depositor address)
-     * @param paymasterId dapp identifier
+     * @dev get the current deposit for sponsorId (Project's identifier)
+     * @param sponsorId project identifier
      */
     function getBalance(
-        address paymasterId
+        address sponsorId
     ) external view returns (uint256 balance) {
-        balance = paymasterIdBalances[paymasterId];
+        balance = sponsorBalances[sponsorId];
+    }
+
+    function getOwner(address sponsorId) external view returns (address owner) {
+        owner = sponsorOwners[sponsorId];
     }
 
     /**
@@ -103,23 +110,23 @@ contract VerifyingSingletonPaymaster is
     }
 
     /**
-     * @dev Withdraws the specified amount of gas tokens from the paymaster's balance and transfers them to the specified address.
-     * @param withdrawAddress The address to which the gas tokens should be transferred.
+     * @dev Withdraws the specified amount of gas tokens from the sponsorId's balance and transfers them to the msg.sender
+     * if the msg.sender is the owner of sponsorId.
+     * @param sponsorId The sponsorId from which the funds are withdrawn
      * @param amount The amount of gas tokens to withdraw.
      */
     function withdrawTo(
-        address payable withdrawAddress,
+        address sponsorId,
         uint256 amount
     ) public override nonReentrant {
-        if (withdrawAddress == address(0)) revert CanNotWithdrawToZeroAddress();
-        uint256 currentBalance = paymasterIdBalances[msg.sender];
+        if (sponsorOwners[sponsorId] != msg.sender)
+            revert CannotWithdrawFromNotOwnedSponsor();
+        uint256 currentBalance = sponsorBalances[sponsorId];
         if (amount > currentBalance)
             revert InsufficientBalance(amount, currentBalance);
-        paymasterIdBalances[msg.sender] =
-            paymasterIdBalances[msg.sender] -
-            amount;
-        entryPoint.withdrawTo(withdrawAddress, amount);
-        emit GasWithdrawn(msg.sender, withdrawAddress, amount);
+        sponsorBalances[sponsorId] = sponsorBalances[sponsorId] - amount;
+        entryPoint.withdrawTo(payable(msg.sender), amount);
+        emit WithdrawnFunds(sponsorId, amount);
     }
 
     /**
@@ -141,12 +148,6 @@ contract VerifyingSingletonPaymaster is
         emit VerifyingSignerChanged(oldSigner, _newVerifyingSigner, msg.sender);
     }
 
-    function setUnaccountedEPGasOverhead(uint256 value) external onlyOwner {
-        uint256 oldValue = unaccountedEPGasOverhead;
-        unaccountedEPGasOverhead = value;
-        emit EPGasOverheadChanged(oldValue, value);
-    }
-
     /**
      * @dev This method is called by the off-chain service, to sign the request.
      * It is called on-chain from the validatePaymasterUserOp, to validate the signature.
@@ -156,14 +157,36 @@ contract VerifyingSingletonPaymaster is
      */
     function getHash(
         UserOperation calldata userOp,
-        address paymasterId
+        address sponsorId
     ) public view returns (bytes32) {
         //can't use userOp.hash(), since it contains also the paymasterAndData itself.
-        address sender = userOp.getSender();
+
         return
             keccak256(
                 abi.encode(
-                    sender,
+                    _pack(userOp),
+                    block.chainid,
+                    address(this),
+                    sponsorId
+                )
+            );
+    }
+
+    function _debitSponsor(address _sponsorId, uint256 _amount) internal {
+        sponsorBalances[_sponsorId] -= _amount;
+    }
+
+    function _creditSponsor(address _sponsorId, uint256 _amount) internal {
+        sponsorBalances[_sponsorId] += _amount;
+    }
+
+    function _pack(
+        UserOperation calldata userOp
+    ) internal pure returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(
+                    userOp.getSender(),
                     userOp.nonce,
                     keccak256(userOp.initCode),
                     keccak256(userOp.callData),
@@ -171,10 +194,7 @@ contract VerifyingSingletonPaymaster is
                     userOp.verificationGasLimit,
                     userOp.preVerificationGas,
                     userOp.maxFeePerGas,
-                    userOp.maxPriorityFeePerGas,
-                    block.chainid,
-                    address(this),
-                    paymasterId
+                    userOp.maxPriorityFeePerGas
                 )
             );
     }
@@ -193,12 +213,21 @@ contract VerifyingSingletonPaymaster is
         bytes32 /*userOpHash*/,
         uint256 requiredPreFund
     ) internal override returns (bytes memory context, uint256 validationData) {
+        (requiredPreFund);
+
         PaymasterData memory paymasterData = userOp._decodePaymasterData();
-        bytes32 hash = getHash(userOp, paymasterData.paymasterId);
         uint256 sigLength = paymasterData.signatureLength;
-        // we only "require" it here so that the revert reason on invalid signature will be of "VerifyingPaymaster", and not "ECDSA"
-        if (sigLength != 65) revert InvalidPaymasterSignatureLength(sigLength);
-        //don't revert on signature failure: return SIG_VALIDATION_FAILED
+
+        // ECDSA library supports both 64 and 65-byte long signatures.
+        // we only "require" it here so that the revert reason on invalid signature will be of "EtherspotPaymaster", and not "ECDSA"
+        require(
+            sigLength == 64 || sigLength == 65,
+            "Paymaster:: invalid signature length in paymasterAndData"
+        );
+
+        bytes32 hash = getHash(userOp, paymasterData.sponsorId);
+
+        // don't revert on signature failure: return SIG_VALIDATION_FAILED
         if (
             verifyingSigner !=
             hash.toEthSignedMessageHash().recover(paymasterData.signature)
@@ -206,33 +235,46 @@ contract VerifyingSingletonPaymaster is
             // empty context and sigTimeRange 1
             return ("", 1);
         }
-        if (requiredPreFund > paymasterIdBalances[paymasterData.paymasterId])
-            revert InsufficientBalance(
-                requiredPreFund,
-                paymasterIdBalances[paymasterData.paymasterId]
-            );
-        return (userOp.paymasterContext(paymasterData, userOp.gasPrice()), 0);
+
+        // check sponsor has enough funds deposited to pay for gas
+        require(
+            sponsorBalances[paymasterData.sponsorId] >= requiredPreFund,
+            "Paymaster:: Sponsor paymaster funds too low"
+        );
+
+        uint256 costOfPost = userOp.maxFeePerGas * COST_OF_POST;
+
+        // debit requiredPreFund amount
+        _debitSponsor(paymasterData.sponsorId, requiredPreFund);
+
+        // no need for other on-chain validation: entire UserOp should have been checked
+        // by the external service prior to signing it.
+        return (
+            userOp.paymasterContext(paymasterData, requiredPreFund, costOfPost),
+            0
+        );
     }
 
-    /**
-     * @dev Executes the paymaster's payment conditions
-     * @param mode tells whether the op succeeded, reverted, or if the op succeeded but cause the postOp to revert
-     * @param context payment conditions signed by the paymaster in `validatePaymasterUserOp`
-     * @param actualGasCost amount to be paid to the entry point in wei
-     */
     function _postOp(
         PostOpMode mode,
         bytes calldata context,
         uint256 actualGasCost
-    ) internal virtual override {
-        PaymasterContext memory data = context._decodePaymasterContext();
-        address extractedPaymasterId = data.paymasterId;
-        uint256 balToDeduct = actualGasCost +
-            unaccountedEPGasOverhead *
-            data.gasPrice;
-        paymasterIdBalances[extractedPaymasterId] =
-            paymasterIdBalances[extractedPaymasterId] -
-            balToDeduct;
-        emit GasBalanceDeducted(extractedPaymasterId, balToDeduct);
+    ) internal override {
+        (
+            address sponsorId,
+            address sender,
+            uint256 prefundedAmount,
+            uint256 costOfPost
+        ) = abi.decode(context, (address, address, uint256, uint256));
+        if (mode == PostOpMode.postOpReverted) {
+            _creditSponsor(sponsorId, prefundedAmount);
+            emit SponsorUnsuccessful(sponsorId, sender);
+        } else {
+            _creditSponsor(
+                sponsorId,
+                prefundedAmount - (actualGasCost + costOfPost)
+            );
+            emit SponsorSuccessful(sponsorId, sender);
+        }
     }
 }
