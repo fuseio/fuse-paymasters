@@ -6,6 +6,7 @@ pragma solidity ^0.8.17;
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {UserOperation, UserOperationLib} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
+import "@account-abstraction/contracts/core/Helpers.sol";
 import {BasePaymaster, IEntryPoint} from "../BasePaymaster.sol";
 import {PaymasterHelpers, PaymasterData, PaymasterContext} from "./PaymasterHelpers.sol";
 import {VerifyingPaymasterErrors} from "../common/Errors.sol";
@@ -157,6 +158,8 @@ contract FuseVerifyingSingletonPaymaster is
      */
     function getHash(
         UserOperation calldata userOp,
+        uint48 validUntil,
+        uint48 validAfter,
         address sponsorId
     ) public view returns (bytes32) {
         //can't use userOp.hash(), since it contains also the paymasterAndData itself.
@@ -167,6 +170,8 @@ contract FuseVerifyingSingletonPaymaster is
                     _pack(userOp),
                     block.chainid,
                     address(this),
+                    validUntil,
+                    validAfter,
                     sponsorId
                 )
             );
@@ -225,7 +230,12 @@ contract FuseVerifyingSingletonPaymaster is
             "Paymaster:: invalid signature length in paymasterAndData"
         );
 
-        bytes32 hash = getHash(userOp, paymasterData.sponsorId);
+        bytes32 hash = getHash(
+            userOp,
+            paymasterData.validUntil,
+            paymasterData.validAfter,
+            paymasterData.sponsorId
+        );
 
         // don't revert on signature failure: return SIG_VALIDATION_FAILED
         if (
@@ -233,7 +243,14 @@ contract FuseVerifyingSingletonPaymaster is
             hash.toEthSignedMessageHash().recover(paymasterData.signature)
         ) {
             // empty context and sigTimeRange 1
-            return ("", 1);
+            return (
+                "",
+                _packValidationData(
+                    true,
+                    paymasterData.validUntil,
+                    paymasterData.validAfter
+                )
+            );
         }
 
         // check sponsor has enough funds deposited to pay for gas
@@ -251,7 +268,11 @@ contract FuseVerifyingSingletonPaymaster is
         // by the external service prior to signing it.
         return (
             userOp.paymasterContext(paymasterData, requiredPreFund, costOfPost),
-            0
+            _packValidationData(
+                false,
+                paymasterData.validUntil,
+                paymasterData.validAfter
+            )
         );
     }
 

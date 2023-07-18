@@ -5,6 +5,8 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
 
 struct PaymasterData {
+    uint48 validUntil;
+    uint48 validAfter;
     address sponsorId;
     bytes signature;
     uint256 signatureLength;
@@ -13,6 +15,21 @@ struct PaymasterData {
 struct PaymasterContext {
     address sponsorId;
     uint256 gasPrice;
+}
+
+/**
+ * returned data from validateUserOp.
+ * validateUserOp returns a uint256, with is created by `_packedValidationData` and parsed by `_parseValidationData`
+ * @param aggregator - address(0) - the account validated the signature by itself.
+ *              address(1) - the account failed to validate the signature.
+ *              otherwise - this is an address of a signature aggregator that must be used to validate the signature.
+ * @param validAfter - this UserOp is valid only after this timestamp.
+ * @param validaUntil - this UserOp is valid only up to this timestamp.
+ */
+struct ValidationData {
+    address aggregator;
+    uint48 validAfter;
+    uint48 validUntil;
 }
 
 /**
@@ -45,11 +62,20 @@ library PaymasterHelpers {
         UserOperation calldata op
     ) internal pure returns (PaymasterData memory) {
         bytes calldata paymasterAndData = op.paymasterAndData;
-        (address sponsorId, bytes memory signature) = abi.decode(
-            paymasterAndData[20:],
-            (address, bytes)
-        );
-        return PaymasterData(sponsorId, signature, signature.length);
+        (
+            uint48 validUntil,
+            uint48 validAfter,
+            address sponsorId,
+            bytes memory signature
+        ) = abi.decode(paymasterAndData[20:], (uint48, uint48, address, bytes));
+        return
+            PaymasterData(
+                validUntil,
+                validAfter,
+                sponsorId,
+                signature,
+                signature.length
+            );
     }
 
     /**
