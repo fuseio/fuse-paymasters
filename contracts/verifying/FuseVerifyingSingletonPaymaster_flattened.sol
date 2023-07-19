@@ -936,7 +936,7 @@ abstract contract BasePaymaster is IPaymaster, Ownable {
      * @param sponsorId The sponsorId to withdraw from
      * @param amount to withdraw
      */
-    function withdrawTo(address sponsorId, uint256 amount) external virtual;
+    function withdrawTo(bytes12 sponsorId, uint256 amount) external virtual;
 
     /**
      * add stake for this paymaster.
@@ -1740,13 +1740,13 @@ pragma solidity ^0.8.17;
 struct PaymasterData {
     uint48 validUntil;
     uint48 validAfter;
-    address sponsorId;
+    bytes12 sponsorId;
     bytes signature;
     uint256 signatureLength;
 }
 
 struct PaymasterContext {
-    address sponsorId;
+    bytes12 sponsorId;
     uint256 gasPrice;
 }
 
@@ -1798,9 +1798,9 @@ library PaymasterHelpers {
         (
             uint48 validUntil,
             uint48 validAfter,
-            address sponsorId,
+            bytes12 sponsorId,
             bytes memory signature
-        ) = abi.decode(paymasterAndData[20:], (uint48, uint48, address, bytes));
+        ) = abi.decode(paymasterAndData[20:], (uint48, uint48, bytes12, bytes));
         return
             PaymasterData(
                 validUntil,
@@ -1817,9 +1817,9 @@ library PaymasterHelpers {
     function _decodePaymasterContext(
         bytes memory context
     ) internal pure returns (PaymasterContext memory) {
-        (address sponsorId, uint256 gasPrice) = abi.decode(
+        (bytes12 sponsorId, uint256 gasPrice) = abi.decode(
             context,
-            (address, uint256)
+            (bytes12, uint256)
         );
         return PaymasterContext(sponsorId, gasPrice);
     }
@@ -1855,8 +1855,8 @@ contract FuseVerifyingSingletonPaymaster is
     // calculated cost of the postOp
     uint256 private constant COST_OF_POST = 40000;
 
-    mapping(address => address) public sponsorOwners;
-    mapping(address => uint256) public sponsorBalances;
+    mapping(bytes12 => address) public sponsorOwners;
+    mapping(bytes12 => uint256) public sponsorBalances;
 
     address public verifyingSigner;
 
@@ -1865,16 +1865,16 @@ contract FuseVerifyingSingletonPaymaster is
         address indexed _newSigner,
         address indexed _actor
     );
-    event DepositedFunds(address indexed _sponsorId, uint256 indexed _value);
-    event WithdrawnFunds(address indexed _sponsorId, uint256 indexed _value);
-    event BalanceDeducted(address indexed _sponsorId, uint256 indexed _charge);
-    event SponsorCreated(address indexed _sponsorId, address indexed _owner);
+    event DepositedFunds(bytes12 indexed _sponsorId, uint256 indexed _value);
+    event WithdrawnFunds(bytes12 indexed _sponsorId, uint256 indexed _value);
+    event BalanceDeducted(bytes12 indexed _sponsorId, uint256 indexed _charge);
+    event SponsorCreated(bytes12 indexed _sponsorId, address indexed _owner);
     event SponsorSuccessful(
-        address indexed _sponsorId,
+        bytes12 indexed _sponsorId,
         address indexed _sender
     );
     event SponsorUnsuccessful(
-        address indexed _sponsorId,
+        bytes12 indexed _sponsorId,
         address indexed _sender
     );
 
@@ -1895,8 +1895,8 @@ contract FuseVerifyingSingletonPaymaster is
      * @dev Add a deposit for this sponsor and given sponsorId (Project's identifier), used for paying for transaction fees
      * @param sponsorId project's identifier for which deposit is being made
      */
-    function depositFor(address sponsorId) external payable nonReentrant {
-        if (sponsorId == address(0)) revert SponsorCannotBeZero();
+    function depositFor(bytes12 sponsorId) external payable nonReentrant {
+        if (sponsorId == bytes12(0)) revert SponsorCannotBeZero();
         if (msg.value == 0) revert DepositCanNotBeZero();
         // If it's the first time deposit for a sponsorId, set the owner of the sponsorId to msg.sender
         if (sponsorOwners[sponsorId] == address(0)) {
@@ -1915,12 +1915,12 @@ contract FuseVerifyingSingletonPaymaster is
      * @param sponsorId project identifier
      */
     function getBalance(
-        address sponsorId
+        bytes12 sponsorId
     ) external view returns (uint256 balance) {
         balance = sponsorBalances[sponsorId];
     }
 
-    function getOwner(address sponsorId) external view returns (address owner) {
+    function getOwner(bytes12 sponsorId) external view returns (address owner) {
         owner = sponsorOwners[sponsorId];
     }
 
@@ -1938,7 +1938,7 @@ contract FuseVerifyingSingletonPaymaster is
      * @param amount The amount of gas tokens to withdraw.
      */
     function withdrawTo(
-        address sponsorId,
+        bytes12 sponsorId,
         uint256 amount
     ) public override nonReentrant {
         if (sponsorOwners[sponsorId] != msg.sender)
@@ -1981,7 +1981,7 @@ contract FuseVerifyingSingletonPaymaster is
         UserOperation calldata userOp,
         uint48 validUntil,
         uint48 validAfter,
-        address sponsorId
+        bytes12 sponsorId
     ) public view returns (bytes32) {
         //can't use userOp.hash(), since it contains also the paymasterAndData itself.
 
@@ -1998,11 +1998,11 @@ contract FuseVerifyingSingletonPaymaster is
             );
     }
 
-    function _debitSponsor(address _sponsorId, uint256 _amount) internal {
+    function _debitSponsor(bytes12 _sponsorId, uint256 _amount) internal {
         sponsorBalances[_sponsorId] -= _amount;
     }
 
-    function _creditSponsor(address _sponsorId, uint256 _amount) internal {
+    function _creditSponsor(bytes12 _sponsorId, uint256 _amount) internal {
         sponsorBalances[_sponsorId] += _amount;
     }
 
@@ -2103,11 +2103,11 @@ contract FuseVerifyingSingletonPaymaster is
         uint256 actualGasCost
     ) internal override {
         (
-            address sponsorId,
+            bytes12 sponsorId,
             address sender,
             uint256 prefundedAmount,
             uint256 costOfPost
-        ) = abi.decode(context, (address, address, uint256, uint256));
+        ) = abi.decode(context, (bytes12, address, uint256, uint256));
         if (mode == PostOpMode.postOpReverted) {
             _creditSponsor(sponsorId, prefundedAmount);
             emit SponsorUnsuccessful(sponsorId, sender);

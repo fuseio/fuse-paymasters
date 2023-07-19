@@ -7,13 +7,13 @@ import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOpera
 struct PaymasterData {
     uint48 validUntil;
     uint48 validAfter;
-    address sponsorId;
+    bytes12 sponsorId;
     bytes signature;
     uint256 signatureLength;
 }
 
 struct PaymasterContext {
-    address sponsorId;
+    bytes12 sponsorId;
     uint256 gasPrice;
 }
 
@@ -65,9 +65,9 @@ library PaymasterHelpers {
         (
             uint48 validUntil,
             uint48 validAfter,
-            address sponsorId,
+            bytes12 sponsorId,
             bytes memory signature
-        ) = abi.decode(paymasterAndData[20:], (uint48, uint48, address, bytes));
+        ) = abi.decode(paymasterAndData[20:], (uint48, uint48, bytes12, bytes));
         return
             PaymasterData(
                 validUntil,
@@ -84,9 +84,9 @@ library PaymasterHelpers {
     function _decodePaymasterContext(
         bytes memory context
     ) internal pure returns (PaymasterContext memory) {
-        (address sponsorId, uint256 gasPrice) = abi.decode(
+        (bytes12 sponsorId, uint256 gasPrice) = abi.decode(
             context,
-            (address, uint256)
+            (bytes12, uint256)
         );
         return PaymasterContext(sponsorId, gasPrice);
     }

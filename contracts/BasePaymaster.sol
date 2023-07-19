@@ -83,7 +83,7 @@ abstract contract BasePaymaster is IPaymaster, Ownable {
      * @param sponsorId The sponsorId to withdraw from
      * @param amount to withdraw
      */
-    function withdrawTo(address sponsorId, uint256 amount) external virtual;
+    function withdrawTo(bytes12 sponsorId, uint256 amount) external virtual;
 
     /**
      * add stake for this paymaster.
