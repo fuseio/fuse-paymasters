@@ -3,6 +3,7 @@ pragma solidity ^0.8.17;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UserOperation} from "@account-abstraction/contracts/interfaces/UserOperation.sol";
+import "@account-abstraction/contracts/core/Helpers.sol";
 
 struct PaymasterData {
     uint48 validUntil;
@@ -26,11 +27,6 @@ struct PaymasterContext {
  * @param validAfter - this UserOp is valid only after this timestamp.
  * @param validaUntil - this UserOp is valid only up to this timestamp.
  */
-struct ValidationData {
-    address aggregator;
-    uint48 validAfter;
-    uint48 validUntil;
-}
 
 /**
  * @title PaymasterHelpers - helper functions for paymasters

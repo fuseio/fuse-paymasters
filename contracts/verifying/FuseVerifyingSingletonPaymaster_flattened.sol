@@ -1759,11 +1759,6 @@ struct PaymasterContext {
  * @param validAfter - this UserOp is valid only after this timestamp.
  * @param validaUntil - this UserOp is valid only up to this timestamp.
  */
-struct ValidationData {
-    address aggregator;
-    uint48 validAfter;
-    uint48 validUntil;
-}
 
 /**
  * @title PaymasterHelpers - helper functions for paymasters
