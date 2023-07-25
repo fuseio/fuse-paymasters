@@ -8,13 +8,13 @@ import "@account-abstraction/contracts/core/Helpers.sol";
 struct PaymasterData {
     uint48 validUntil;
     uint48 validAfter;
-    bytes12 sponsorId;
+    uint256 sponsorId;
     bytes signature;
     uint256 signatureLength;
 }
 
 struct PaymasterContext {
-    bytes12 sponsorId;
+    uint256 sponsorId;
     uint256 gasPrice;
 }
 
@@ -61,9 +61,9 @@ library PaymasterHelpers {
         (
             uint48 validUntil,
             uint48 validAfter,
-            bytes12 sponsorId,
+            uint256 sponsorId,
             bytes memory signature
-        ) = abi.decode(paymasterAndData[20:], (uint48, uint48, bytes12, bytes));
+        ) = abi.decode(paymasterAndData[20:], (uint48, uint48, uint256, bytes));
         return
             PaymasterData(
                 validUntil,
@@ -80,9 +80,9 @@ library PaymasterHelpers {
     function _decodePaymasterContext(
         bytes memory context
     ) internal pure returns (PaymasterContext memory) {
-        (bytes12 sponsorId, uint256 gasPrice) = abi.decode(
+        (uint256 sponsorId, uint256 gasPrice) = abi.decode(
             context,
-            (bytes12, uint256)
+            (uint256, uint256)
         );
         return PaymasterContext(sponsorId, gasPrice);
     }
