@@ -116,7 +116,7 @@ contract FuseVerifyingSingletonPaymaster is
      * @param sponsorId The sponsorId from which the funds are withdrawn
      * @param amount The amount of gas tokens to withdraw.
      */
-    function withdrawTo(
+    function withdrawFunds(
         bytes12 sponsorId,
         uint256 amount
     ) public override nonReentrant {
