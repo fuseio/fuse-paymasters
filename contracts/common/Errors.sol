@@ -23,7 +23,7 @@ contract VerifyingPaymasterErrors {
     /**
      * @notice Throws when the sponsor address provided is address(0)
      */
-    error SponsorCannotBeZero();
+    error SponsorIdCannotBeZero();
 
     /**
      * @notice Throws when the 0 has been provided as deposit

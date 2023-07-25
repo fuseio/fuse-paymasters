@@ -75,7 +75,7 @@ contract FuseVerifyingSingletonPaymaster is
      * @param sponsorId project's identifier for which deposit is being made
      */
     function depositFor(bytes12 sponsorId) external payable nonReentrant {
-        if (sponsorId == bytes12(0)) revert SponsorCannotBeZero();
+        if (sponsorId == bytes12(0)) revert SponsorIdCannotBeZero();
         if (msg.value == 0) revert DepositCanNotBeZero();
         // If it's the first time deposit for a sponsorId, set the owner of the sponsorId to msg.sender
         if (sponsorOwners[sponsorId] == address(0)) {
