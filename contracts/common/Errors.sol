@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 contract BasePaymasterErrors {
     /**
@@ -21,9 +21,9 @@ contract VerifyingPaymasterErrors {
     error VerifyingSignerCannotBeZero();
 
     /**
-     * @notice Throws when the paymaster address provided is address(0)
+     * @notice Throws when the sponsor address provided is address(0)
      */
-    error PaymasterIdCannotBeZero();
+    error SponsorIdCannotBeZero();
 
     /**
      * @notice Throws when the 0 has been provided as deposit
@@ -34,6 +34,16 @@ contract VerifyingPaymasterErrors {
      * @notice Throws when trying to withdraw to address(0)
      */
     error CanNotWithdrawToZeroAddress();
+
+    /**
+     * @notice Throws when trying to withdraw from a sponsor that is owned by someone else
+     */
+    error CannotWithdrawFromNotOwnedSponsor();
+
+    /**
+     * @notice Throws when trying to deposit to a sponsor that is owned by someone else
+     */
+    error CannotDepositToNotOwnedSponsor();
 
     /**
      * @notice Throws when trying to withdraw more than balance available

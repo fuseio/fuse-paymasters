@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.8.17;
+pragma solidity ^0.8.17;
 
 /* solhint-disable reason-string */
 
@@ -80,13 +80,10 @@ abstract contract BasePaymaster is IPaymaster, Ownable {
 
     /**
      * withdraw value from the deposit
-     * @param withdrawAddress target to send to
+     * @param sponsorId The sponsorId to withdraw from
      * @param amount to withdraw
      */
-    function withdrawTo(
-        address payable withdrawAddress,
-        uint256 amount
-    ) external virtual;
+    function withdrawFunds(uint256 sponsorId, uint256 amount) external virtual;
 
     /**
      * add stake for this paymaster.
